@@ -3,6 +3,8 @@ import cors from 'cors';
 import generateJWT from './generate-jwt';
 import dotenv from 'dotenv';
 import validateJWT from './middlewares/validate-jwt';
+import validateBook from './middlewares/validate-book';
+import { Book } from './book';
 dotenv.config();
 
 const app = express();
@@ -12,7 +14,9 @@ const user = {
     password: '123456'
 }
 
-let books = [
+const blackListedTokens: string[] = [];
+
+const books: Book[] = [
     {
         isbn: '9781593275846',
         title: 'Eloquent JavaScript, Second Edition',
@@ -20,7 +24,16 @@ let books = [
         publish_date: '2014-12-14',
         publisher: 'No Starch Press',
         numOfPages: '472'
+    },
+    {
+        isbn: '444444444',
+        title: 'Eloquent JavaScript, Second Edition',
+        author: 'Marijn Haverbeke',
+        publish_date: '2014-12-14',
+        publisher: 'No Starch Press',
+        numOfPages: '472'
     }
+
 ];
 
 app.use(cors());
@@ -41,13 +54,44 @@ app.post('/login', async (req, res) => {
     }
 });
 
-app.post('/book', (req, res) => {
-    const book = req.body;
-    books.push(book);
-
-    console.log(book)
-    res.send('Book is added to the database');
+app.post('/logout', validateJWT, (req, res) => {
+    const token = req.headers.authorization;
+    console.log(token);
+    blackListedTokens.push(token);
+    res.status(200).json({msg: 'Logout successful'});
 });
+
+app.get('/blacklist', (req, res) => {
+    res.json(blackListedTokens);
+});
+
+app.post('/bookID', validateBook, (req, res) => {
+    const book: Book = req.body;
+
+    books.forEach((item, index) => {
+        if (item.isbn === book.isbn) {
+            res.status(400).json({msg: 'Book already exists'});
+            return;
+        } else {
+            books.push(book);
+            res.status(200).json({msg: 'Book is added to the database'});
+        }
+    });
+});
+
+// app.post('/book', (req, res) => {
+//     const book = req.body;
+
+//     let id = 0;
+//     books.forEach(book => {
+//         if (book.id >  id) {
+//             id = book.id;
+//         }
+//     })
+//     book.id = id + 1;
+//     books.push(book);
+//     res.status(200).json('Book is added to the database');
+// });
 
 app.get('/books', validateJWT, (req, res) => {
     res.json(books);
@@ -69,15 +113,18 @@ app.get('/book/:isbn', (req, res) => {
 });
 
 app.delete('/book/:isbn', validateJWT, (req, res) => {
+    // Reading isbn from the URL
     const isbn = req.params.isbn;
-    books = books.filter(i => {
-        if(i.isbn !== isbn) {
-            return true;
+
+    books.forEach((item, index) => {
+        console.log(item.isbn, isbn);
+        if (item.isbn === isbn) {
+            console.log(item.isbn);
+            books.splice(index, 1);
         }
-        return false;
     });
 
-    res.send('Book is deleted');
+    res.status(200).json({msg: 'Book deleted'});
 });
 
 app.put('/book/:isbn', (req, res) => {
@@ -92,8 +139,9 @@ app.put('/book/:isbn', (req, res) => {
             books[i] = newBook;
         }
     }
-    res.send('Book is edited');
+    res.status(200).json({msg: 'Book is edited'});
 });
 
-app.listen(port, () => console.log(`Hello world app listening on port ${port}!`))
+export default { blackListedTokens }
 
+app.listen(port, () => console.log(`Hello world app listening on port ${port}!`))
